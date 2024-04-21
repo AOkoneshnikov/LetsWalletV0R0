@@ -72,29 +72,17 @@ describe('LetsWalletV1R0', () => {
 
         console.log('wallet_1 data = ', data);
 
-        let test1 = 12345678;
-        let test2 = String(test1);
-        let buf1 = Buffer.alloc(25);
-        buf1.writeInt32BE(test1);
-        let test1_sign = sign(buf1, keypair_User1.secretKey); 
-        let test2_sign = sign(Buffer.from(test2), keypair_User1.secretKey); 
-        console.log(test1);
-        console.log(test2);
-        console.log('test1_sign = ', test1_sign);
-        console.log('test2_sign = ', test2_sign);
-
-
-
-
         let wallet_1_operation_data = beginCell()
                                     .storeUint(0,32)
                                     .storeUint(1,8)                        
                                     .endCell();
 
-        //console.log(wallet_1_operation_data.toString());
-        //const wallet_1_data_signature = sign(Buffer.from(wallet_1_operation_data.toString()), keypair_User1.secretKey); 
+        //console.log(wallet_1_operation_data.toBoc());
+        const wallet_1_data_signature = sign(wallet_1_operation_data.toBoc(), keypair_User1.secretKey); 
+        console.log('wallet_1_data_signature = ', wallet_1_data_signature);
 
-        //console.log('wallet_1_operation_data = ', wallet_1_operation_data);
+        let sss = Cell.fromBoc(wallet_1_operation_data.toBoc());
+        console.log('sss', sss);
 
         //wallet_1.sendExternal()
 
