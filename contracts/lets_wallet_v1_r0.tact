@@ -15,19 +15,45 @@ contract LetsWalletV1R0 {
 
     receive () {}
 
+    external (msg: CreateTrustlineV1R0) {
+        acceptMessage();
+        dump("-- create trustline --");
+    }
+
     external(msg: WalletOperationV1R0) {
+        acceptMessage();
         dump(1);
+        dump("-- sha256 --");
+        let test_str: String = "hello";
+        dump(sha256(msg.operation));
 
         // Check Signature
         let op_hash: Int = msg.operation.hash();
-        require(checkSignature(op_hash, msg.signature, self.publicKey), "Invalid signature");
+        dump("-- signature --");
+        dump(msg.signature.bits());
+      //  dump(msg.signature.loadInt(512));
+        
+
+        let pkg: Slice = msg.operation;
+        dump("-- operations --");
+        dump(self.publicKey);
+        dump(op_hash);
+        dump(pkg.preloadUint(32));
+        dump(pkg.preloadUint(8));
+
+        //dump(checkDataSignature(msg.operation, msg.signature, self.publicKey));
+        dump(checkSignature(op_hash, msg.signature, self.publicKey));
+        
+        
+
+        //require(checkSignature(op_hash, msg.signature, self.publicKey), "Invalid signature");
 
         dump(2);
 
-        let pkg: Slice = msg.operation;
+       // let pkg: Slice = msg.operation;
         let seqno: Int = pkg.loadInt(32);
         require(seqno == self.seqno, "Invalid seqno");
-        acceptMessage();
+        
         self.seqno = (self.seqno + 1);
         commit();
 
@@ -103,5 +129,10 @@ message(0x02) WalletDataV1R0 {
     linkId: Int as uint64;
     sponsor: Address?;
     balance: Int as coins;
+}
+
+message (0x03) CreateTrustlineV1R0 {
+    signature: Slice as bytes64;
+    debitor: Address;
 }
 

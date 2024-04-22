@@ -22,6 +22,7 @@
         "typescript": "^5.4.3"
     },
     "dependencies": {
+        "@trufflesuite/bigint-buffer": "^1.1.10",
         "ton-crypto": "^3.2.0"
     }
 }
