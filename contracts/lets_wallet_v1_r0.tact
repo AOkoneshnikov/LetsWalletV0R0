@@ -51,6 +51,9 @@ contract LetsWalletV1R0 {
 
         if (mode == 0) && (owner == 0) { // send money
             dump(4);
+            //self.loadMap(pkg.loadRef().beginParse());
+            //pkg.loadDict();
+            dump(pkg.loadUint(8));
         } else if (mode == 1) && (owner == 0) { // set Sponsor
             let cellSponsor: Slice = pkg.loadRef().asSlice();
             let addressSponsor: Address = cellSponsor.loadAddress();
@@ -87,6 +90,15 @@ contract LetsWalletV1R0 {
         self.addressSponsor = null;
         self.publickeySponsor = null;
         dump("sponsor disabled");
+    }
+
+    fun loadMap(pkg: Slice) {
+        //let mode: Int = pkg.loadUint(8);
+        //let ss: Address = pkg.loadAddress();
+        while(pkg.refs() > 0) {
+                self.loadMap(pkg.loadRef().beginParse());
+                dump(pkg.bits());
+            }
     }
 }
 

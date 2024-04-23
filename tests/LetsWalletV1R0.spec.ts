@@ -1,5 +1,5 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
-import { beginCell, Cell, toNano } from '@ton/core';
+import { beginCell, Cell, Dictionary, toNano } from '@ton/core';
 import { LetsWalletV1R0, WalletOperationV1R0, DataSponsor } from '../wrappers/LetsWalletV1R0';
 import '@ton/test-utils';
 import { keyPairFromSeed, keyPairFromSecretKey, sign, signVerify, KeyPair, getSecureRandomBytes, mnemonicNew, mnemonicToWalletKey, sha256 } from 'ton-crypto';
@@ -88,9 +88,46 @@ describe('LetsWalletV1R0', () => {
             signature: data_signature,
             operation: operation_data,
         });
+    });
 
 
-            
+    it('Test #2', async () => {
+        const keypair_User1: KeyPair = await mnemonicToWalletKey(mnemonicWallet1);
+        const keypair_User2: KeyPair = await mnemonicToWalletKey(mnemonicWallet2);
+
+        let data = await wallet_1.getData();
+        let timeout = Math.floor(Date.now() / 1000) + 20;
+
+        console.log('wallet_1 data = ', data);
+
+        let dictUser1 = Dictionary.empty(Dictionary.Keys.Int(8), Dictionary.Values.Address());
+
+        dictUser1.set(0, User1.address);
+        dictUser1.set(1, User2.address);
+        dictUser1.set(2, User1.address);
+        dictUser1.set(3, User2.address);
+        dictUser1.set(4, User1.address);
+        dictUser1.set(8, User1.address);
+
+        console.log('dictUser1 = ',dictUser1 );
+        
+        let operation_data = beginCell()
+            .storeUint(0,8) // owner = 0, sponsor = 1
+            .storeUint(timeout, 32)
+            .storeUint(data.seqno,64)
+            .storeUint(0,8) //mode
+            .storeDict(dictUser1)
+            .endCell();
+
+        
+        console.log('operation_data = ', operation_data);
+        let data_signature = sign(operation_data.hash(), keypair_User1.secretKey); 
+        
+        wallet_1.sendExternal({
+            $$type: 'WalletOperationV1R0',
+            signature: data_signature,
+            operation: operation_data,
+        });
     });
 
 });
