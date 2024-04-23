@@ -52,11 +52,9 @@ contract LetsWalletV1R0 {
         if (mode == 0) && (owner == 0) { // send money
             dump(4);
         } else if (mode == 1) && (owner == 0) { // set Sponsor
-            dump(5);
             let cellSponsor: Slice = pkg.loadRef().asSlice();
             let addressSponsor: Address = cellSponsor.loadAddress();
             let publickeySponsor: Int = cellSponsor.loadUint(256);
-            dump(publickeySponsor);
             self.setSponsor(addressSponsor, publickeySponsor);
         } else if (mode == 2) && (owner == 1) { // disable Sponsor
             dump(6);
