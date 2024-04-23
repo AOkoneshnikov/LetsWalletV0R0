@@ -1,6 +1,6 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { beginCell, Cell, Dictionary, toNano } from '@ton/core';
-import { LetsWalletV1R0, WalletOperationV1R0, DataSponsor } from '../wrappers/LetsWalletV1R0';
+import { LetsWalletV1R0 } from '../wrappers/LetsWalletV1R0';
 import '@ton/test-utils';
 import { keyPairFromSeed, keyPairFromSecretKey, sign, signVerify, KeyPair, getSecureRandomBytes, mnemonicNew, mnemonicToWalletKey, sha256 } from 'ton-crypto';
 import { TonClient } from '@ton/ton';
@@ -37,10 +37,13 @@ describe('LetsWalletV1R0', () => {
         'village', 'shell',  'jealous',
         'welcome', 'wink',   'mind'
       ];
+    let keypair_User1: KeyPair;
+    let keypair_User2: KeyPair;
+
 
     beforeEach(async () => {         
-        const keypair_User1: KeyPair = await mnemonicToWalletKey(mnemonicWallet1);
-        const keypair_User2: KeyPair = await mnemonicToWalletKey(mnemonicWallet2);
+        keypair_User1 = await mnemonicToWalletKey(mnemonicWallet1);
+        keypair_User2 = await mnemonicToWalletKey(mnemonicWallet2);
 
         blockchain = await Blockchain.create();
         wallet_1 = blockchain.openContract(await LetsWalletV1R0.fromInit('RUB', toBigIntBE(keypair_User1.publicKey)));
@@ -59,42 +62,15 @@ describe('LetsWalletV1R0', () => {
     });
 
     it('Test #1', async () => {
-        const keypair_User1: KeyPair = await mnemonicToWalletKey(mnemonicWallet1);
-        const keypair_User2: KeyPair = await mnemonicToWalletKey(mnemonicWallet2);
-
         let data = await wallet_1.getData();
         let timeout = Math.floor(Date.now() / 1000) + 20;
 
         console.log('wallet_1 data = ', data);
-
-        let operation_data = beginCell()
-            .storeUint(0,8)
-            .storeUint(timeout, 32)
-            .storeUint(data.seqno,64)
-            .storeUint(1,8)
-            .storeRef(
-                beginCell()
-                .storeAddress(User2.address)
-                .storeUint(toBigIntBE(keypair_User2.publicKey),256)
-                .endCell()
-            )
-            .endCell();
         
-        
-        let data_signature = sign(operation_data.hash(), keypair_User1.secretKey); 
-        
-        wallet_1.sendExternal({
-            $$type: 'WalletOperationV1R0',
-            signature: data_signature,
-            operation: operation_data,
-        });
     });
 
 
     it('Test #2', async () => {
-        const keypair_User1: KeyPair = await mnemonicToWalletKey(mnemonicWallet1);
-        const keypair_User2: KeyPair = await mnemonicToWalletKey(mnemonicWallet2);
-
         let data = await wallet_1.getData();
         let timeout = Math.floor(Date.now() / 1000) + 20;
 
@@ -109,25 +85,64 @@ describe('LetsWalletV1R0', () => {
         dictUser1.set(4, User1.address);
         dictUser1.set(8, User1.address);
 
-        console.log('dictUser1 = ',dictUser1 );
-        
-        let operation_data = beginCell()
-            .storeUint(0,8) // owner = 0, sponsor = 1
+        let header = beginCell()
             .storeUint(timeout, 32)
-            .storeUint(data.seqno,64)
-            .storeUint(0,8) //mode
-            .storeDict(dictUser1)
+            .storeUint(data.seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
             .endCell();
+        
+        let header_signature = sign(header.hash(), keypair_User1.secretKey); 
 
-        
-        console.log('operation_data = ', operation_data);
-        let data_signature = sign(operation_data.hash(), keypair_User1.secretKey); 
-        
-        wallet_1.sendExternal({
-            $$type: 'WalletOperationV1R0',
-            signature: data_signature,
-            operation: operation_data,
+        await wallet_1.sendExternal({
+            $$type: 'SendMoney',
+            signature: header_signature,
+            header: header,
+            path: dictUser1,
         });
+        console.log('wallet_1 data = ', await wallet_1.getData());
+
     });
+
+    it('Test #3', async () => {
+        let data = await wallet_1.getData();
+        let timeout = Math.floor(Date.now() / 1000) + 20;
+
+        console.log('wallet_1 data = ', data);
+
+        let header = beginCell()
+            .storeUint(timeout, 32)
+            .storeUint(data.seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+        
+        
+        let header_signature = sign(header.hash(), keypair_User1.secretKey); 
+        
+        await wallet_1.sendExternal({
+            $$type: 'SetSponsor',
+            signature: header_signature,
+            header: header,
+            address: User2.address,
+            publicKey: toBigIntBE(keypair_User2.publicKey)
+        });
+        data = await wallet_1.getData()
+        console.log('wallet_1 data = ', data);
+
+        header = beginCell()
+            .storeUint(timeout+20, 32)
+            .storeUint(data.seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+        header_signature = sign(header.hash(), keypair_User2.secretKey); 
+
+        await wallet_1.sendExternal({
+            $$type: 'CancelSponsor',
+            signature: header_signature,
+            header: header
+        });
+        console.log('wallet_1 data = ', await wallet_1.getData());
+
+    });
+
 
 });

@@ -2,7 +2,7 @@ import "@stdlib/deploy";
 
 contract LetsWalletV1R0 {
     publickeyOwner: Int as uint256;
-    seqno: Int as uint64 = 0;
+    seqno: Int as uint32 = 0;
     currency: String;
     version: String = "LetsWalletV1R0";
     linkId: Int as uint64 = 0;
@@ -20,49 +20,39 @@ contract LetsWalletV1R0 {
     receive () {}
 
     external(msg: SetSponsor) {
-        //let pkg: Slice = msg.data;
-    }
+        require((self.publickeySponsor == null) && (self.addressSponsor == null), "Error: Sponsor already exist");
 
-    external(msg: WalletOperationV1R0) {
-
-        let pkg: Slice = msg.operation;
-        let owner: Int = pkg.loadInt(8);
-
-        // Check Signature
-        let op_hash: Int = msg.operation.hash();
-        if (owner == 0) { // owner self
-            require(checkSignature(op_hash, msg.signature, self.publickeyOwner), "Error: Invalid signature");
-        }
-        else {   // sponsor
-            require(checkSignature(op_hash, msg.signature, self.publickeySponsor!!), "Error: Invalid signature");
+        if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
+            acceptMessage();
+            self.seqno = (self.seqno + 1) % 65536;
+            self.publickeySponsor = msg.publicKey;
+            self.addressSponsor = msg.address; 
         }
         
-        // Check parameters
-        let timeout: Int = pkg.loadInt(32);
-        let seqno: Int = pkg.loadInt(64);
-        let mode: Int = pkg.loadUint(8); // Operation type
+    }
 
-        require(seqno == self.seqno, "Error: Invalid seqno");
-        require(now() < timeout, "Error: Transfer expired");
+    external(msg: CancelSponsor) {
+        require((self.publickeySponsor != null) || (self.addressSponsor != null), "Error: Sponsor no set");
 
-        acceptMessage();
-        self.seqno = (self.seqno + 1);
-        commit();
+        if (self.CheckMsg(msg.signature, msg.header, self.publickeySponsor!!)) {
+            acceptMessage();
+            self.seqno = (self.seqno + 1) % 65536;
+            self.publickeySponsor = null;
+            self.addressSponsor = null; 
+        }
+    }
 
-        if (mode == 0) && (owner == 0) { // send money
-            dump(4);
-            //self.loadMap(pkg.loadRef().beginParse());
-            //pkg.loadDict();
-            dump(pkg.loadUint(8));
-        } else if (mode == 1) && (owner == 0) { // set Sponsor
-            let cellSponsor: Slice = pkg.loadRef().asSlice();
-            let addressSponsor: Address = cellSponsor.loadAddress();
-            let publickeySponsor: Int = cellSponsor.loadUint(256);
-            self.setSponsor(addressSponsor, publickeySponsor);
-        } else if (mode == 2) && (owner == 1) { // disable Sponsor
-            dump(6);
-        } else if (mode == 3) && (owner == 0){ // create trustline
-            dump(7);
+    external(msg: SendMoney) {
+        if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
+            acceptMessage();
+            self.seqno = (self.seqno + 1) % 65536;
+        }
+        let i: Int = 0;
+        let x: Address? = null;
+        repeat(4) {
+            x = msg.path.get(i);
+            dump(i);
+            i = i + 1;
         }
     }
 
@@ -75,30 +65,21 @@ contract LetsWalletV1R0 {
             version: self.version,
             linkId: self.linkId,
             addressSponsor: self.addressSponsor,
+            addressOwner: myAddress(),
             balance: myBalance()
         };
     }
 
-    fun setSponsor(addressSponsor: Address, publickeySponsor: Int) {
-        require((self.addressSponsor == null) && (self.publickeySponsor == null), "Error: Sponsor wallet already set");
-        self.addressSponsor = addressSponsor;
-        self.publickeySponsor = publickeySponsor;
-        dump("sponsor set");
-    }
+    fun CheckMsg(signature: Slice, header: Slice, publickey: Int): Bool {
+        let header_hash: Int = header.hash();
+        let timeout: Int = header.loadInt(32);
+        let seqno: Int = header.loadInt(32);
 
-    fun disableSponsor() {
-        self.addressSponsor = null;
-        self.publickeySponsor = null;
-        dump("sponsor disabled");
-    }
+        require(checkSignature(header_hash, signature, publickey), "Error: Invalid signature");
+        require(seqno == self.seqno, "Error: Invalid seqno");
+        require(now() < timeout, "Error: timeout expired");
 
-    fun loadMap(pkg: Slice) {
-        //let mode: Int = pkg.loadUint(8);
-        //let ss: Address = pkg.loadAddress();
-        while(pkg.refs() > 0) {
-                self.loadMap(pkg.loadRef().beginParse());
-                dump(pkg.bits());
-            }
+        return true;
     }
 }
 
@@ -134,12 +115,8 @@ contract LetsTrustlineV1R0 {
     receive () {}
 }
 
-message (0x01) WalletOperationV1R0 {
-    signature: Slice as bytes64;
-    operation: Slice as remaining;
-}
 
-message(0x02) WalletDataV1R0 {
+message WalletDataV1R0 {
     publickeyOwner: Int as uint256;
     publickeySponsor: Int? as uint256;
     seqno: Int as uint64;
@@ -147,16 +124,24 @@ message(0x02) WalletDataV1R0 {
     version: String;
     linkId: Int as uint64;
     addressSponsor: Address?;
+    addressOwner: Address;
     balance: Int as coins;
 }
 
-struct DataSponsor {
+message SetSponsor {
+    signature: Slice as bytes64;
+    header: Slice;
     address: Address? = null;
     publicKey: Int? as uint256 = null;
-} 
-
-message(0x03) SetSponsor {
-    signature: Slice as bytes64;
-    data: DataSponsor; 
 }
 
+message CancelSponsor {
+    signature: Slice as bytes64;
+    header: Slice;
+}
+
+message SendMoney {
+    signature: Slice as bytes64;
+    header: Slice;
+    path: map<Int as uint8, Address>;
+}
