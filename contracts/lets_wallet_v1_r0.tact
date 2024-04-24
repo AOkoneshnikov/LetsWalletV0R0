@@ -18,11 +18,14 @@ contract LetsWalletV0R0 {
     receive () {}
 
     external(msg: CreateTrustlineV0R0) {
-        require(myBalance() > (msg.tontoLinkId + msg.tontoTrustline), "Error: not enough funds to create");
+        require(myBalance() > (msg.tontoTrustlineLink + msg.tontoTrustline + msg.tontoHubLink), "Error: not enough funds to create");
 
         if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
             let initTrustline: StateInit = initOf LetsTrustlineV0R0(myAddress(), msg.debitor);
-            let initLink: StateInit = initOf LetsTrustlineLinkV0R0(myAddress(),self.linkId);
+            let initTrustlineLink: StateInit = initOf LetsTrustlineLinkV0R0(myAddress(),self.linkId);
+            let initHub: StateInit = initOf LetsHubV0R0(self.currency);
+
+            
             send(SendParameters{
                 to: contractAddress(initTrustline),
                 value: msg.tontoTrustline,              
@@ -30,12 +33,17 @@ contract LetsWalletV0R0 {
                 data: initTrustline.data    
             }); 
             send(SendParameters{
-                to: contractAddress(initLink),
-                value: msg.tontoLinkId,      
-                body: SetTrustlineV0R0 { trustline: contractAddress(initTrustline) }.toCell(),        
-                code: initLink.code,               
-                data: initLink.data    
+                to: contractAddress(initTrustlineLink),
+                value: msg.tontoTrustlineLink,      
+                body: SetTrustlineV0R0 { creditor: myAddress(), debitor: msg.debitor }.toCell(),        
+                code: initTrustlineLink.code,               
+                data: initTrustlineLink.data    
             }); 
+            send(SendParameters{
+                to: contractAddress(initHub),
+                value: msg.tontoHubLink,
+                body: SetTrustlineV0R0 { creditor: myAddress(), debitor: msg.debitor }.toCell()
+            });
 
             self.linkId = self.linkId + 1;
         }
@@ -115,7 +123,7 @@ contract LetsTrustlineLinkV0R0 {
 
     receive (msg: SetTrustlineV0R0) {
         require(sender() == self.wallet, "Error: Only wallet can set trustline address");
-        self.trustline = msg.trustline;
+        self.trustline = contractAddress(initOf LetsTrustlineV0R0(msg.creditor, msg.debitor));
     }
 
     get fun Data(): TrustlineLinkDataV0R0 {
@@ -150,19 +158,47 @@ contract LetsHubV0R0 {
     version: String = "LetsHubV0R0";
     currency: String;
     linkTrustlineId: Int as uint64 = 0;
-    linkWalletId: Int as uint64 = 0;
 
     init (currency: String) {
         self.currency = currency;
+    }
+
+    receive () {}
+
+    receive (msg: SetTrustlineV0R0) {
+        let initHubLink: StateInit = initOf LetsHubLinkV0R0(self.currency, self.linkTrustlineId);
+        send(SendParameters{
+                to: contractAddress(initHubLink),
+                value: 0,
+                mode: SendRemainingValue,      
+                body: msg.toCell(),        
+                code: initHubLink.code,               
+                data: initHubLink.data    
+            }); 
     }
 
     get fun Data(): HubDataV0R0 {
         return HubDataV0R0 {
             balance: myBalance(),
             version: self.version,
-            linkTrustlineId: self.linkTrustlineId,
-            linkWalletId: self.linkWalletId
+            linkTrustlineId: self.linkTrustlineId
         };
+    }
+}
+
+contract LetsHubLinkV0R0 {
+    currency: String;
+    linkTrustlineId: Int as uint64;
+    trustline: Address? = null;
+    init (currency: String, linkTrustlineId: Int) {
+        self.currency = currency;
+        self.linkTrustlineId = linkTrustlineId;
+    }
+
+    receive (msg: SetTrustlineV0R0) {
+        let initHub: StateInit = initOf LetsHubV0R0(self.currency);
+        require(sender() == contractAddress(initHub), "Error: Only LetsHubV0R0 can set trustline address");
+        self.trustline = contractAddress(initOf LetsTrustlineV0R0(msg.creditor, msg.debitor));
     }
 }
 
@@ -170,7 +206,6 @@ message HubDataV0R0 {
     balance: Int as coins;
     version: String;
     linkTrustlineId: Int as uint64;
-    linkWalletId: Int as uint64;
 }
 
 message WalletDataV0R0 {
@@ -191,7 +226,12 @@ message TrustlineLinkDataV0R0 {
 }
 
 message SetTrustlineV0R0 {
-    trustline: Address;
+    creditor: Address;
+    debitor: Address;
+}
+
+message SetWalletV0R0 {
+    wallet: Address;
 }
 
 message SetSponsorV0R0 {
@@ -217,5 +257,6 @@ message CreateTrustlineV0R0 {
     header: Slice;
     debitor: Address;
     tontoTrustline: Int as coins;
-    tontoLinkId: Int as coins;
+    tontoTrustlineLink: Int as coins;
+    tontoHubLink: Int as coins;
 }

@@ -8,6 +8,7 @@ import { toBigIntBE, toBigIntLE } from '@trufflesuite/bigint-buffer';
 import { Slice } from 'ton';
 import 'json-bigint';
 import { LetsTrustlineLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsTrustlineLinkV0R0';
+import { LetsHubV0R0 } from '../build/LetsWalletV0R0/tact_LetsHubV0R0';
 
 
 
@@ -19,6 +20,8 @@ describe('LetsWalletV1R0', () => {
     let Sponsor: SandboxContract<TreasuryContract>;
     let wallet_1: SandboxContract<LetsWalletV0R0>;
     let wallet_2: SandboxContract<LetsWalletV0R0>;
+    let hub: SandboxContract<LetsHubV0R0>;
+    
     const mnemonicWallet1 =  [
         'release', 'junior',  'cake',
         'boost',   'stock',   'illness',
@@ -50,6 +53,7 @@ describe('LetsWalletV1R0', () => {
         blockchain = await Blockchain.create();
         wallet_1 = blockchain.openContract(await LetsWalletV0R0.fromInit('RUB', toBigIntBE(keypair_User1.publicKey)));
         wallet_2 = blockchain.openContract(await LetsWalletV0R0.fromInit('RUB', toBigIntBE(keypair_User2.publicKey)));
+        hub = blockchain.openContract(await LetsHubV0R0.fromInit('RUB'));
 
         deployer = await blockchain.treasury('deployer');
         User1 = await blockchain.treasury('User1');
@@ -91,7 +95,8 @@ describe('LetsWalletV1R0', () => {
             header: header,
             debitor: User2.address,
             tontoTrustline: toNano('5'),
-            tontoLinkId: toNano('1'),
+            tontoTrustlineLink: toNano('1'),
+            tontoHubLink: toNano('0.5')
         });
         console.log('wallet_1 data = ', await wallet_1.getData());
 
