@@ -1,12 +1,14 @@
 import { Blockchain, SandboxContract, TreasuryContract } from '@ton/sandbox';
 import { beginCell, Cell, Dictionary, toNano } from '@ton/core';
-import { LetsWalletV1R0 } from '../wrappers/LetsWalletV1R0';
+import { LetsWalletV0R0, CreateTrustlineV0R0 } from '../wrappers/LetsWalletV0R0';
 import '@ton/test-utils';
 import { keyPairFromSeed, keyPairFromSecretKey, sign, signVerify, KeyPair, getSecureRandomBytes, mnemonicNew, mnemonicToWalletKey, sha256 } from 'ton-crypto';
 import { TonClient } from '@ton/ton';
 import { toBigIntBE, toBigIntLE } from '@trufflesuite/bigint-buffer';
 import { Slice } from 'ton';
 import 'json-bigint';
+import { LetsTrustlineLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsTrustlineLinkV0R0';
+
 
 
 describe('LetsWalletV1R0', () => {
@@ -15,8 +17,8 @@ describe('LetsWalletV1R0', () => {
     let User1: SandboxContract<TreasuryContract>;
     let User2: SandboxContract<TreasuryContract>;
     let Sponsor: SandboxContract<TreasuryContract>;
-    let wallet_1: SandboxContract<LetsWalletV1R0>;
-    let wallet_2: SandboxContract<LetsWalletV1R0>;
+    let wallet_1: SandboxContract<LetsWalletV0R0>;
+    let wallet_2: SandboxContract<LetsWalletV0R0>;
     const mnemonicWallet1 =  [
         'release', 'junior',  'cake',
         'boost',   'stock',   'illness',
@@ -46,16 +48,25 @@ describe('LetsWalletV1R0', () => {
         keypair_User2 = await mnemonicToWalletKey(mnemonicWallet2);
 
         blockchain = await Blockchain.create();
-        wallet_1 = blockchain.openContract(await LetsWalletV1R0.fromInit('RUB', toBigIntBE(keypair_User1.publicKey)));
+        wallet_1 = blockchain.openContract(await LetsWalletV0R0.fromInit('RUB', toBigIntBE(keypair_User1.publicKey)));
+        wallet_2 = blockchain.openContract(await LetsWalletV0R0.fromInit('RUB', toBigIntBE(keypair_User2.publicKey)));
 
         deployer = await blockchain.treasury('deployer');
         User1 = await blockchain.treasury('User1');
         User2 = await blockchain.treasury('User2');
 
-        const deployResult = await wallet_1.send(
+        let deployResult = await wallet_1.send(
             deployer.getSender(),
             {
-                value: toNano('5'),
+                value: toNano('50'),
+            },
+            null,
+        );
+
+        deployResult = await wallet_2.send(
+            deployer.getSender(),
+            {
+                value: toNano('80'),
             },
             null,
         );
@@ -64,8 +75,28 @@ describe('LetsWalletV1R0', () => {
     it('Test #1', async () => {
         let data = await wallet_1.getData();
         let timeout = Math.floor(Date.now() / 1000) + 20;
-
         console.log('wallet_1 data = ', data);
+
+        let header = beginCell()
+            .storeUint(timeout, 32)
+            .storeUint(data.seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+        
+        let header_signature = sign(header.hash(), keypair_User1.secretKey); 
+
+        await wallet_1.sendExternal({
+            $$type: 'CreateTrustlineV0R0',
+            signature: header_signature,
+            header: header,
+            debitor: User2.address,
+            tontoTrustline: toNano('5'),
+            tontoLinkId: toNano('1'),
+        });
+        console.log('wallet_1 data = ', await wallet_1.getData());
+
+        let link = blockchain.openContract(await LetsTrustlineLinkV0R0.fromInit(wallet_1.address, 0n));
+        console.log('link 0n balance = ', await link.getData());
         
     });
 
@@ -94,7 +125,7 @@ describe('LetsWalletV1R0', () => {
         let header_signature = sign(header.hash(), keypair_User1.secretKey); 
 
         await wallet_1.sendExternal({
-            $$type: 'SendMoney',
+            $$type: 'SendMoneyV0R0',
             signature: header_signature,
             header: header,
             path: dictUser1,
@@ -119,7 +150,7 @@ describe('LetsWalletV1R0', () => {
         let header_signature = sign(header.hash(), keypair_User1.secretKey); 
         
         await wallet_1.sendExternal({
-            $$type: 'SetSponsor',
+            $$type: 'SetSponsorV0R0',
             signature: header_signature,
             header: header,
             address: User2.address,
@@ -136,7 +167,7 @@ describe('LetsWalletV1R0', () => {
         header_signature = sign(header.hash(), keypair_User2.secretKey); 
 
         await wallet_1.sendExternal({
-            $$type: 'CancelSponsor',
+            $$type: 'CancelSponsorV0R0',
             signature: header_signature,
             header: header
         });

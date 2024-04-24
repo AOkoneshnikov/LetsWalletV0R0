@@ -1,5 +1,5 @@
 import { toNano } from '@ton/core';
-import { LetsWalletV1R0 } from '../wrappers/LetsWalletV1R0';
+import { LetsWalletV1R0 } from '../wrappers/LetsWalletV0R0';
 import { NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
