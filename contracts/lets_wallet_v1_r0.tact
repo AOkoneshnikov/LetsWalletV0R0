@@ -9,6 +9,14 @@ contract LetsWalletV0R0 {
     addressSponsor: Address? = null;
     publickeySponsor: Int? as uint256 = null;
     content: Cell? = null;
+    locality: String? = null;
+    longitude: Int? = null;
+    latitude: Int? = null;
+    name: String? = null;
+    phone: String? = null;
+    email: String? = null;
+    telegramId: Int? as uint64 = null; 
+    telegramRef: String? = null;
 
     init(currency: String, publicKey: Int) {
         self.publickeyOwner = publicKey;
@@ -80,6 +88,40 @@ contract LetsWalletV0R0 {
         }
     }
 
+    external(msg: SendTonV0R0) {
+        require ((self.addressSponsor == null) && (self.publickeySponsor == null), "Error: you cannot send money while the wallet has a sponsor");
+        if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
+            send(SendParameters{
+                to: msg.to,
+                value: msg.value,      
+                body: msg.comment.asComment()        
+            });
+        }
+    }
+
+    external(msg: SetCustomWalletDataV0R0) {
+        if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
+            self.content = msg.content; 
+            self.locality = msg.locality; 
+            self.longitude = msg.longitude; 
+            self.latitude = msg.latitude; 
+            self.name = msg.name; 
+            self.phone = msg.phone; 
+            self.email = msg.email; 
+            self.telegramId = msg.telegramId; 
+            self.telegramRef = msg.telegramRef; 
+        }
+    }
+
+    receive (msg: WidthrawV0R0) {
+        require(sender() == self.addressSponsor, "Error: Only sponsor can widthraw funds");
+        send(SendParameters{
+                to: self.addressSponsor!!,
+                value: msg.value,      
+                body: "widthraw sponsored funds".asComment()        
+            });
+    }
+
     get fun Data(): WalletDataV0R0 {
         return WalletDataV0R0 { 
             publickeyOwner: self.publickeyOwner,
@@ -89,7 +131,16 @@ contract LetsWalletV0R0 {
             version: self.version,
             linkId: self.linkId,
             addressSponsor: self.addressSponsor,
-            balance: myBalance()
+            balance: myBalance(),
+            content: self.content,
+            locality: self.locality,
+            longitude: self.longitude,
+            latitude: self.latitude,
+            name: self.name,
+            phone: self.phone,
+            email: self.email,
+            telegramId: self.telegramId, 
+            telegramRef:self.telegramRef
         };
     }
 
@@ -121,6 +172,8 @@ contract LetsTrustlineLinkV0R0 {
         self.linkId = linkId;
     }
 
+    receive () {}
+
     receive (msg: SetTrustlineV0R0) {
         require(sender() == self.wallet, "Error: Only wallet can set trustline address");
         self.trustline = contractAddress(initOf LetsTrustlineV0R0(msg.creditor, msg.debitor));
@@ -149,9 +202,7 @@ contract LetsTrustlineV0R0 {
         self.debitor = debitor;
     }
 
-    receive () {
-        require (sender() == self.creditor, "Error: Only creditor can send empty message");
-    }
+    receive () {}
 }
 
 contract LetsHubV0R0 {
@@ -190,22 +241,53 @@ contract LetsHubLinkV0R0 {
     currency: String;
     linkTrustlineId: Int as uint64;
     trustline: Address? = null;
+    version: String = "LetsHubLinkV0R0";
     init (currency: String, linkTrustlineId: Int) {
         self.currency = currency;
         self.linkTrustlineId = linkTrustlineId;
     }
+    
+    receive () {}
 
     receive (msg: SetTrustlineV0R0) {
         let initHub: StateInit = initOf LetsHubV0R0(self.currency);
         require(sender() == contractAddress(initHub), "Error: Only LetsHubV0R0 can set trustline address");
         self.trustline = contractAddress(initOf LetsTrustlineV0R0(msg.creditor, msg.debitor));
     }
+
+    get fun Data(): HubLinkDataV0R0 {
+        return HubLinkDataV0R0 {
+            balance: myBalance(),
+            version: self.version,
+            trustline: self.trustline
+        };
+    }
+}
+
+message HubLinkDataV0R0 {
+    balance: Int as coins;
+    version: String;
+    trustline: Address?;
 }
 
 message HubDataV0R0 {
     balance: Int as coins;
     version: String;
     linkTrustlineId: Int as uint64;
+}
+
+message SetCustomWalletDataV0R0 {
+    signature: Slice as bytes64;
+    header: Slice;
+    content: Cell;
+    locality: String;
+    longitude: Int;
+    latitude: Int;
+    name: String;
+    phone: String;
+    email: String;
+    telegramId: Int as uint64; 
+    telegramRef: String;
 }
 
 message WalletDataV0R0 {
@@ -217,6 +299,15 @@ message WalletDataV0R0 {
     linkId: Int as uint64;
     addressSponsor: Address?;
     balance: Int as coins;
+    content: Cell?;
+    locality: String?;
+    longitude: Int?;
+    latitude: Int?;
+    name: String?;
+    phone: String?;
+    email: String?;
+    telegramId: Int? as uint64; 
+    telegramRef: String?;
 }
 
 message TrustlineLinkDataV0R0 {
@@ -237,8 +328,8 @@ message SetWalletV0R0 {
 message SetSponsorV0R0 {
     signature: Slice as bytes64;
     header: Slice;
-    address: Address? = null;
-    publicKey: Int? as uint256 = null;
+    address: Address?;
+    publicKey: Int? as uint256;
 }
 
 message CancelSponsorV0R0 {
@@ -259,4 +350,16 @@ message CreateTrustlineV0R0 {
     tontoTrustline: Int as coins;
     tontoTrustlineLink: Int as coins;
     tontoHubLink: Int as coins;
+}
+
+message WidthrawV0R0 {
+    value: Int as coins;
+}
+
+message SendTonV0R0 {
+    signature: Slice as bytes64;
+    header: Slice;
+    to: Address;
+    value: Int as coins;
+    comment: String;
 }
