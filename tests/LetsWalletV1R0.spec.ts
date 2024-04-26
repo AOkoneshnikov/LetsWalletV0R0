@@ -10,6 +10,8 @@ import 'json-bigint';
 import { LetsTrustlineLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsTrustlineLinkV0R0';
 import { LetsHubV0R0 } from '../build/LetsWalletV0R0/tact_LetsHubV0R0';
 import { LetsHubLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsHubLinkV0R0';
+import { LetsLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsLinkV0R0';
+import { LetsTrustlineV0R0 } from '../build/LetsWalletV0R0/tact_LetsTrustlineV0R0';
 
 
 
@@ -30,6 +32,9 @@ describe('LetsWalletV1R0', () => {
     let wallet_5: SandboxContract<LetsWalletV0R0>;
     let wallet_6: SandboxContract<LetsWalletV0R0>;
     let hub: SandboxContract<LetsHubV0R0>;
+
+    let wallets = [];
+    let keypairs = [];
     
     const mnemonicSponsor =   [
         'student', 'pattern', 'arctic',
@@ -106,9 +111,6 @@ describe('LetsWalletV1R0', () => {
         'ketchup', 'love',     'clerk',
         'always',  'auto',     'goose'
       ];
-
-      
-      
 
     let keypair_User1: KeyPair;
     let keypair_User2: KeyPair;
@@ -224,20 +226,14 @@ describe('LetsWalletV1R0', () => {
             header: header,
             debitor: User2.address,
             tontoTrustline: toNano('5'),
-            tontoTrustlineLink: toNano('1'),
-            tontoHubLink: toNano('0.5')
+            tontoLink: toNano('0.2'),
         });
         console.log('wallet_1 data = ', await wallet_1.getData());
+;
 
-        let link = blockchain.openContract(await LetsTrustlineLinkV0R0.fromInit(wallet_1.address, 0n));
-        console.log('link 0n balance = ', await link.getData());
+        let link = blockchain.openContract(await LetsLinkV0R0.fromInit('RUB', 0n));
+        console.log('linkHub 0n balance = ', await link.getData());
 
-        let linkHub = blockchain.openContract(await LetsHubLinkV0R0.fromInit('RUB', 0n));
-        console.log('linkHub 0n balance = ', await linkHub.getData());
-
-        
-       // console.log(await mnemonicNew(24));
-        
     });
 
 
@@ -264,12 +260,6 @@ describe('LetsWalletV1R0', () => {
         
         let header_signature = sign(header.hash(), keypair_User1.secretKey); 
 
-        await wallet_1.sendExternal({
-            $$type: 'SendMoneyV0R0',
-            signature: header_signature,
-            header: header,
-            path: dictUser1,
-        });
         console.log('wallet_1 data = ', await wallet_1.getData());
 
     });
@@ -322,7 +312,7 @@ describe('LetsWalletV1R0', () => {
             .endCell();
         header_signature = sign(header.hash(), keypair_User1.secretKey); 
         await wallet_1.sendExternal({
-            $$type: 'SendTonV0R0',
+            $$type: 'TransferTonV0R0',
             signature: header_signature,
             header: header,
             to: User2.address,
@@ -344,7 +334,7 @@ describe('LetsWalletV1R0', () => {
             .endCell();
         let header_signature = sign(header.hash(), keypair_User1.secretKey); 
         await wallet_1.sendExternal({
-            $$type: 'SendTonV0R0',
+            $$type: 'TransferTonV0R0',
             signature: header_signature,
             header: header,
             to: User2.address,
@@ -382,9 +372,191 @@ describe('LetsWalletV1R0', () => {
 
 
     it('Test #5', async () => {
-        
-    });
 
+        let i = 0;
+        while (i < 10) {
+            let seed = await getSecureRandomBytes(32);
+            keypairs[i] = keyPairFromSeed(seed);
+            wallets[i] = blockchain.openContract(await LetsWalletV0R0.fromInit('RUB', toBigIntBE(keypairs[i].publicKey)));
+            let deployResult = await wallets[i].send(
+                deployer.getSender(),
+                {
+                    value: toNano('10'),
+                },
+                null,
+            ); 
+            i = i + 1;
+        }
+
+        i = 0;
+        while (i < 6) {
+            let header = beginCell()
+            .storeUint(Math.floor(Date.now() / 1000) + 10, 32)
+            .storeUint((await wallets[i].getData()).seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+            let header_signature = sign(header.hash(), keypairs[i].secretKey); 
+
+            if (i == 5) {
+                await wallets[5].sendExternal({
+                    $$type: 'CreateTrustlineV0R0',
+                    signature: header_signature,
+                    header: header,
+                    debitor: wallets[0].address,
+                    tontoTrustline: toNano('5'),
+                    tontoLink: toNano('0.2'),
+                });
+            } 
+            else {
+                await wallets[i].sendExternal({
+                    $$type: 'CreateTrustlineV0R0',
+                    signature: header_signature,
+                    header: header,
+                    debitor: wallets[i+1].address,
+                    tontoTrustline: toNano('5'),
+                    tontoLink: toNano('0.2'),
+                });
+            }
+            i = i + 1;
+        }
+
+        i = 0;
+        while (i < 6) {
+            let header = beginCell()
+            .storeUint(Math.floor(Date.now() / 1000) + 10, 32)
+            .storeUint((await wallets[i].getData()).seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+            let header_signature = sign(header.hash(), keypairs[i].secretKey); 
+
+            if (i == 5) {
+                await wallets[5].sendExternal({
+                    $$type: 'SetLimitV0R0',
+                    signature: header_signature,
+                    header: header,
+                    debitor: wallets[0].address,
+                    limit: 300000n,
+                    tontoTrustline: toNano('1'),
+                });
+            } 
+            else {
+                await wallets[i].sendExternal({
+                    $$type: 'SetLimitV0R0',
+                    signature: header_signature,
+                    header: header,
+                    debitor: wallets[i+1].address,
+                    limit: 300000n,
+                    tontoTrustline: toNano('1'),
+                });
+            }
+            i = i + 1;
+        }
+
+        i = 0;
+        while (i < 6) {
+            let header = beginCell()
+            .storeUint(Math.floor(Date.now() / 1000) + 10, 32)
+            .storeUint((await wallets[i].getData()).seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+            let header_signature = sign(header.hash(), keypairs[i].secretKey); 
+
+            if (i == 5) {
+                await wallets[5].sendExternal({
+                    $$type: 'SetInterestProjectV0R0',
+                    signature: header_signature,
+                    header: header,
+                    debitor: wallets[0].address,
+                    interestProject: 1000n,
+                    tontoTrustline: toNano('1'),
+                });
+            } 
+            else {
+                await wallets[i].sendExternal({
+                    $$type: 'SetInterestProjectV0R0',
+                    signature: header_signature,
+                    header: header,
+                    debitor: wallets[i+1].address,
+                    interestProject: 1000n,
+                    tontoTrustline: toNano('1'),
+                });
+            }
+            i = i + 1;
+        }
+
+        i = 0;
+        while (i < 6) {
+            let header = beginCell()
+            .storeUint(Math.floor(Date.now() / 1000) + 10, 32)
+            .storeUint((await wallets[i].getData()).seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+            let header_signature = sign(header.hash(), keypairs[i].secretKey); 
+
+            if (i == 0) {
+                await wallets[0].sendExternal({
+                    $$type: 'ConfirmInterestV0R0',
+                    signature: header_signature,
+                    header: header,
+                    creditor: wallets[5].address,
+                    interestProject: 1000n,
+                    tontoTrustline: toNano('1'),
+                });
+            } 
+            else {
+                await wallets[i].sendExternal({
+                    $$type: 'ConfirmInterestV0R0',
+                    signature: header_signature,
+                    header: header,
+                    creditor: wallets[i-1].address,
+                    interestProject: 1000n,
+                    tontoTrustline: toNano('1'),
+                });
+            }
+            i = i + 1;
+        }
+
+        i = 0;
+        while (i < 6) {
+            let link = blockchain.openContract(await LetsLinkV0R0.fromInit('RUB', BigInt(i)));
+            console.log('link[',i,'] balance = ', await link.getData());
+            if (i == 5) {
+                let trustline = blockchain.openContract(await LetsTrustlineV0R0.fromInit(wallets[5].address, wallets[0].address));
+                console.log('trustline[', i, '] balance = ', await trustline.getData());
+            }
+            else {
+                let trustline = blockchain.openContract(await LetsTrustlineV0R0.fromInit(wallets[i].address, wallets[i+1].address));
+                console.log('trustline[', i, '] balance = ', await trustline.getData());
+            }
+            i = i + 1;        
+        }
+
+
+        let pathTransfer = Dictionary.empty(Dictionary.Keys.Int(8), Dictionary.Values.Address());
+
+        pathTransfer.set(0, wallets[0].address);
+        pathTransfer.set(1, wallets[1].address);
+        pathTransfer.set(2, wallets[2].address);
+
+        let header = beginCell()
+            .storeUint(Math.floor(Date.now() / 1000) + 10, 32)
+            .storeUint((await wallets[0].getData()).seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+        let header_signature = sign(header.hash(), keypairs[0].secretKey); 
+
+        await wallets[i].sendExternal({
+            $$type: 'TransferMoneyV0R0',
+            signature: header_signature,
+            header: header,
+            amount: 100n,
+            onCredit: false,
+            currentStep: 0n,
+            bounced: false,
+            path: pathTransfer
+        });
+
+    });
 
 
 
