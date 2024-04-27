@@ -535,8 +535,8 @@ describe('LetsWalletV1R0', () => {
         let pathTransfer = Dictionary.empty(Dictionary.Keys.Int(8), Dictionary.Values.Address());
 
         pathTransfer.set(0, wallets[0].address);
-        pathTransfer.set(1, wallets[1].address);
-        pathTransfer.set(2, wallets[2].address);
+        pathTransfer.set(1, wallets[5].address);
+        pathTransfer.set(2, wallets[4].address);
         pathTransfer.set(3, wallets[3].address);
 
         let header = beginCell()
@@ -551,12 +551,50 @@ describe('LetsWalletV1R0', () => {
             signature: header_signature,
             header: header,
             amount: 100n,
+            onCredit: true,
+            currentStep: 0n,
+            countStep: 0n,
+            bounced: false,
+            path: pathTransfer,
+            tontoTrustline: toNano('1')
+        });
+
+        let trustline1 = blockchain.openContract(await LetsTrustlineV0R0.fromInit(wallets[5].address, wallets[0].address));
+        let trustline2 = blockchain.openContract(await LetsTrustlineV0R0.fromInit(wallets[4].address, wallets[5].address));
+        let trustline3 = blockchain.openContract(await LetsTrustlineV0R0.fromInit(wallets[3].address, wallets[4].address));
+        console.log('trustline[WA] balance = ', await trustline1.getData());
+        console.log('trustline[EW] balance = ', await trustline2.getData());
+        console.log('trustline[DE] balance = ', await trustline3.getData());
+
+
+        pathTransfer.set(0, wallets[3].address);
+        pathTransfer.set(1, wallets[4].address);
+        pathTransfer.set(2, wallets[5].address);
+        pathTransfer.set(3, wallets[0].address);
+
+        header = beginCell()
+            .storeUint(Math.floor(Date.now() / 1000) + 10, 32)
+            .storeUint((await wallets[3].getData()).seqno,32)
+            .storeUint(Math.floor(Math.random() * 65536),32)
+            .endCell();
+        header_signature = sign(header.hash(), keypairs[3].secretKey); 
+        await wallets[3].sendExternal({
+            $$type: 'TransferMoneyV0R0',
+            signature: header_signature,
+            header: header,
+            amount: 50n,
             onCredit: false,
             currentStep: 0n,
             countStep: 0n,
             bounced: false,
-            path: pathTransfer
+            path: pathTransfer,
+            tontoTrustline: toNano('1')
         });
+        
+        console.log('trustline[WA] balance = ', await trustline1.getData());
+        console.log('trustline[EW] balance = ', await trustline2.getData());
+        console.log('trustline[DE] balance = ', await trustline3.getData());
+
 
     });
 

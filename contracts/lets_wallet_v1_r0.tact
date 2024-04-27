@@ -25,6 +25,8 @@ contract LetsWalletV0R0 {
 
     receive ("Operation success") {}
 
+    receive ("Operation error") {}
+
     external(msg: CreateTrustlineV0R0) {
         require(myBalance() > (msg.tontoTrustline + msg.tontoLink), "Error: not enough funds to create");
 
@@ -34,7 +36,8 @@ contract LetsWalletV0R0 {
 
             send(SendParameters{
                 to: contractAddress(initTrustline),
-                value: msg.tontoTrustline,              
+                value: msg.tontoTrustline,
+                body: "fund".asComment(),              
                 code: initTrustline.code,               
                 data: initTrustline.data    
             }); 
@@ -299,6 +302,7 @@ contract LetsTrustlineV0R0 {
     limit: Int as coins = 0;
     interest: Int as uint16 = 0;
     interestProject: Int as uint16 = 0;
+    active: Bool = false;
 
     init (creditor: Address, debitor: Address) {
         require (sender() == creditor, "Error: only creditor can create LetsTrustlineV0R0");
@@ -306,23 +310,27 @@ contract LetsTrustlineV0R0 {
         self.debitor = debitor;
     }
 
-    receive () {
-        require(sender() == self.creditor, "Error: Only creditor wallet can send empty message");
+    receive ("fund") {
+        require(sender() == self.creditor, "Error: Only creditor can funds wallet");
+        self.active = true;
     }
 
     receive (msg: SetLimitV0R0) {
+        require(self.active, "Error: contract not active");
         require((sender() == self.creditor) && (msg.debitor == self.debitor), "Error: only creditor can set limit or incorrect debitor address");
         self.limit = msg.limit;
         self.reply("Operation success".asComment());
     }
 
     receive (msg: SetInterestProjectV0R0) {
+        require(self.active, "Error: contract not active");
         require((sender() == self.creditor) && (msg.debitor == self.debitor), "Error: only creditor can set interest rate project or incorrect debitor address");
         self.interestProject = msg.interestProject;
         self.reply("Operation success".asComment());
     }
 
     receive (msg: ConfirmInterestV0R0) {
+        require(self.active, "Error: contract not active");
         require((sender() == self.debitor) && (msg.creditor == self.creditor), "Error: only debitor can confirm interest or incorrect creditor address");
         require(self.interestProject == msg.interestProject, "Error: incorrest interest rate project");
         self.interest = self.interestProject;
@@ -330,26 +338,109 @@ contract LetsTrustlineV0R0 {
         self.reply("Operation success".asComment());
     }
 
-    receive (msg: TransferMoneyV0R0) {
-        if (sender() == self.creditor) || (sender() == self.debitor) {
-            dump("first entry");
+    fun Revers(msg: TransferMoneyV0R0):TransferMoneyV0R0 {
+        let newPath: map<Int as uint8, Address> = emptyMap();
+        let i: Int = 0;
+        msg.currentStep = msg.currentStep - 1;
+        repeat (msg.currentStep) {
+            newPath.set(i, msg.path.get(msg.currentStep - i));
+            dump(msg.currentStep - i);
+            i = i + 1;
+        }
+        msg.currentStep = 1;
+        msg.path = newPath;
+    }
 
+    fun Mint(msg: TransferMoneyV0R0): Bool {
+        if (self.value + msg.amount) <= self.limit {
+            self.value = self.value + msg.amount;
+            if msg.currentStep == msg.countStep { 
+                send(SendParameters{
+                    to: msg.path.get(0)!!,
+                    value: 0,
+                    mode: SendRemainingValue,
+                    body: "Operation success".asComment()
+                });
+                return true; 
+            } 
+            msg.currentStep = msg.currentStep + 1;
+            let startNode: Address? = msg.path.get(msg.currentStep-1);
+            let endNode: Address? = msg.path.get(msg.currentStep);
+            send(SendParameters{
+                to: contractAddress(initOf LetsTrustlineV0R0(endNode!!, startNode!!)),
+                value: 0,
+                mode: SendRemainingValue,
+                body: msg.toCell() });
+            return true;
+        } else 
+        {
+            msg.bounced = true;
+            self.reply(msg.toCell());
+            return false;
+        }
+    } 
+
+    fun Burn(msg: TransferMoneyV0R0): Bool {
+        if (self.value >= msg.amount) {
+            self.value = self.value - msg.amount;
+            if msg.currentStep == msg.countStep { 
+                send(SendParameters{
+                    to: msg.path.get(0)!!,
+                    value: 0,
+                    mode: SendRemainingValue,
+                    body: "Operation success".asComment()
+                });
+                return true; 
+            } 
+            msg.currentStep = msg.currentStep + 1;
+            let startNode: Address? = msg.path.get(msg.currentStep-1);
+            let endNode: Address? = msg.path.get(msg.currentStep);
+            send(SendParameters{
+                to: contractAddress(initOf LetsTrustlineV0R0(startNode!!, endNode!!)),
+                value: 0,
+                mode: SendRemainingValue,
+                body: msg.toCell() });
+            return true;
+        } else 
+        {
+            msg.bounced = true;
+            self.reply(msg.toCell());
+            return false;
+        }
+    }
+
+    receive (msg: TransferMoneyV0R0) {
+        require(self.active, "Error: contract not active");
+        
+        if (sender() == self.creditor) && (msg.bounced == false) {
+            self.Burn(msg); return;
         }
 
+        if (sender() == self.debitor) && (msg.bounced == false) {
+            self.Mint(msg); return;
+        }
+        
+        let startNode: Address? = msg.path.get(msg.currentStep-2);
+        let endNode: Address? = msg.path.get(msg.currentStep-1);
+        let trustlineBurn: Address = contractAddress(initOf LetsTrustlineV0R0(startNode!!, endNode!!));
+        let trustlineMint: Address = contractAddress(initOf LetsTrustlineV0R0(endNode!!, startNode!!));
+  
+        if (sender() == trustlineMint) && (msg.bounced == false) {
+            self.Mint(msg); return;
+        }
 
-        /*if msg.onCredit && !msg.bounced {
-            require(sender() == self.creditor, "Error:");
-            dump(1);
-        } else if msg.onCredit && msg.bounced {
-                    require(sender() == self.debitor, "Error:");
-                    dump(2);
-                } else if !msg.onCredit && !msg.bounced {
-                            require(sender() == self.debitor, "Error:");
-                            dump(3);
-                        } else if !msg.onCredit && msg.bounced {
-                                    require(sender() == self.creditor, "Error:");
-                                    dump(4);
-                                }*/
+        if (sender() == trustlineBurn) && (msg.bounced == false) {
+            self.Burn(msg); return;
+        }
+
+        if (sender() == trustlineMint) && (msg.bounced == true) {
+            self.Mint(msg); return;
+        }
+
+        if (sender() == trustlineBurn) && (msg.bounced == true) {
+            self.Burn(msg); return;
+        }
+        
     }
 
     get fun Data(): TrustlineDataV0R0 {
