@@ -516,7 +516,7 @@ describe('LetsWalletV1R0', () => {
             i = i + 1;
         }
 
-        i = 0;
+        /*i = 0;
         while (i < 6) {
             let link = blockchain.openContract(await LetsLinkV0R0.fromInit('RUB', BigInt(i)));
             console.log('link[',i,'] balance = ', await link.getData());
@@ -529,7 +529,7 @@ describe('LetsWalletV1R0', () => {
                 console.log('trustline[', i, '] balance = ', await trustline.getData());
             }
             i = i + 1;        
-        }
+        }*/
 
 
         let pathTransfer = Dictionary.empty(Dictionary.Keys.Int(8), Dictionary.Values.Address());
@@ -537,6 +537,7 @@ describe('LetsWalletV1R0', () => {
         pathTransfer.set(0, wallets[0].address);
         pathTransfer.set(1, wallets[1].address);
         pathTransfer.set(2, wallets[2].address);
+        pathTransfer.set(3, wallets[3].address);
 
         let header = beginCell()
             .storeUint(Math.floor(Date.now() / 1000) + 10, 32)
@@ -545,13 +546,14 @@ describe('LetsWalletV1R0', () => {
             .endCell();
         let header_signature = sign(header.hash(), keypairs[0].secretKey); 
 
-        await wallets[i].sendExternal({
+        await wallets[0].sendExternal({
             $$type: 'TransferMoneyV0R0',
             signature: header_signature,
             header: header,
             amount: 100n,
             onCredit: false,
             currentStep: 0n,
+            countStep: 0n,
             bounced: false,
             path: pathTransfer
         });

@@ -130,11 +130,34 @@ contract LetsWalletV0R0 {
     }
 
     external(msg: TransferMoneyV0R0) {
-        if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
-            dump(1);
-            //if self.checkTransferParams(msg) {
-          //      dump("-- success path --");
-         //   }
+        if self.CheckMsg(msg.signature, msg.header, self.publickeyOwner) {
+            let countStep: Int = self.checkTransferParams(msg);
+            if  countStep > 0 {
+                let nextNode: Address? = msg.path.get(1);
+                let initTrustline: StateInit? = null;
+
+                if msg.onCredit {
+                    initTrustline = initOf LetsTrustlineV0R0(nextNode!!, myAddress());
+                } else {
+                    initTrustline = initOf LetsTrustlineV0R0(myAddress(), nextNode!!);
+                }
+                
+                send(SendParameters{
+                    to: contractAddress(initTrustline!!),
+                    value: msg.tontoTrustline,
+                    body: TransferMoneyV0R0 { 
+                        signature: msg.signature, 
+                        header: msg.header,
+                        onCredit: msg.onCredit,
+                        amount: msg.amount,
+                        currentStep: 1,
+                        countStep:countStep,
+                        bounced: false,
+                        path: msg.path,
+                        tontoTrustline: msg.tontoTrustline
+                        }.toCell()               
+                });
+            }
         }
     }
 
@@ -182,24 +205,27 @@ contract LetsWalletV0R0 {
         return true;
     }
 
-    fun checkTransferParams(msg: TransferMoneyV0R0): Bool {
+    fun checkTransferParams(msg: TransferMoneyV0R0): Int {
         require(msg.amount > 0, "Error: amount must be greater than zero");
-        require((msg.currentStep == 0) && (msg.bounced == false), "Error: incorrect currentStep or bounced flag");
         let i: Int = 0;
-        let startNodeAddress: Address? = msg.path.get(0);
-        while (startNodeAddress!= null) {
-            let nextNodeAddress: Address? = msg.path.get(i + 1);
-            let y: Int = i;
-            while (nextNodeAddress != null) {
-                require(nextNodeAddress != startNodeAddress, "Error: path is ring");
+        let y: Int = 0;
+        let i_a: Address? = null;
+        let y_a: Address? = null;
+
+        i_a = msg.path.get(0);
+        require(i_a == myAddress(), "Error: first node in path must wallet");
+        while (i_a != null) {
+            y = i + 1;
+            y_a = msg.path.get(y);
+            while (y_a != null) {
+                require(i_a != y_a, "Error: path is ring");
                 y = y + 1;
-                nextNodeAddress = msg.path.get(y)!!;
+                y_a = msg.path.get(y);
             }
-            i = i + 1;
-            startNodeAddress = msg.path.get(i)!!;
+            i = i + 1; 
+            i_a = msg.path.get(i);
         }
-        require(i > 1, "Error: count node in path there must be more than one");
-        return true; 
+        return i - 1; 
     }
 }
 
@@ -302,6 +328,28 @@ contract LetsTrustlineV0R0 {
         self.interest = self.interestProject;
         self.interestProject = 0;
         self.reply("Operation success".asComment());
+    }
+
+    receive (msg: TransferMoneyV0R0) {
+        if (sender() == self.creditor) || (sender() == self.debitor) {
+            dump("first entry");
+
+        }
+
+
+        /*if msg.onCredit && !msg.bounced {
+            require(sender() == self.creditor, "Error:");
+            dump(1);
+        } else if msg.onCredit && msg.bounced {
+                    require(sender() == self.debitor, "Error:");
+                    dump(2);
+                } else if !msg.onCredit && !msg.bounced {
+                            require(sender() == self.debitor, "Error:");
+                            dump(3);
+                        } else if !msg.onCredit && msg.bounced {
+                                    require(sender() == self.creditor, "Error:");
+                                    dump(4);
+                                }*/
     }
 
     get fun Data(): TrustlineDataV0R0 {
@@ -433,7 +481,9 @@ message TransferMoneyV0R0 {
     header: Slice;
     amount: Int as coins;
     onCredit: Bool = false;
-    currentStep: Int as uint8 = 0;
+    currentStep: Int as uint8;
+    countStep: Int as uint8;
     bounced: Bool = false;
-    path: map<Int as uint8, Address>;
+    path: map<Int as uint8, Address>; 
+    tontoTrustline: Int as coins;
 }
