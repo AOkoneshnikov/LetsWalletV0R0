@@ -15,6 +15,8 @@ contract LetsWalletV0R0 {
     email: String? = null;
     telegramId: Int? as uint64 = null; 
     telegramRef: String? = null;
+    lastDestination: Address? = null;
+    lastTransferAmount: Int as coins = 0;
 
     init(currency: String, publicKey: Int) {
         self.publickeyOwner = publicKey;
@@ -23,9 +25,13 @@ contract LetsWalletV0R0 {
 
     receive () {}
 
-    receive ("Operation success") {}
+    receive ("payment chain end") {
+        self.lastDestination = sender();
+       // dump("-- end payment --");
+    }
 
-    receive ("Operation error") {}
+    receive ("Operation success") {
+    }
 
     external(msg: CreateTrustlineV0R0) {
         require(myBalance() > (msg.tontoTrustline + msg.tontoLink), "Error: not enough funds to create");
@@ -144,7 +150,7 @@ contract LetsWalletV0R0 {
                 } else {
                     initTrustline = initOf LetsTrustlineV0R0(myAddress(), nextNode!!);
                 }
-                
+
                 send(SendParameters{
                     to: contractAddress(initTrustline!!),
                     value: msg.tontoTrustline,
@@ -155,11 +161,11 @@ contract LetsWalletV0R0 {
                         amount: msg.amount,
                         currentStep: 1,
                         countStep:countStep,
-                        bounced: false,
                         path: msg.path,
                         tontoTrustline: msg.tontoTrustline
                         }.toCell()               
                 });
+                self.lastTransferAmount = msg.amount;
             }
         }
     }
@@ -191,6 +197,18 @@ contract LetsWalletV0R0 {
             telegramId: self.telegramId, 
             telegramRef:self.telegramRef
         };
+    }
+
+    get fun seqno(): Int {
+        return self.seqno;
+    }
+
+    get fun lastDestination(): Address? {
+        return self.lastDestination;
+    }
+
+    get fun lastTransferAmount(): Int {
+        return self.lastTransferAmount;
     }
 
     fun CheckMsg(signature: Slice, header: Slice, publickey: Int): Bool {
@@ -338,28 +356,27 @@ contract LetsTrustlineV0R0 {
         self.reply("Operation success".asComment());
     }
 
-    fun Revers(msg: TransferMoneyV0R0):TransferMoneyV0R0 {
-        let newPath: map<Int as uint8, Address> = emptyMap();
-        let i: Int = 0;
-        msg.currentStep = msg.currentStep - 1;
-        repeat (msg.currentStep) {
-            newPath.set(i, msg.path.get(msg.currentStep - i));
-            dump(msg.currentStep - i);
+    fun AddPathBounce(msg: TransferMoneyV0R0):TransferMoneyV0R0 {
+        let y: Int = msg.currentStep;
+        let i: Int = 1;
+        repeat (y) {
+            msg.path.set(y + i, msg.path.get(y - i));
             i = i + 1;
         }
-        msg.currentStep = 1;
-        msg.path = newPath;
+        msg.currentStep = y + 2;
+        msg.countStep = y * 2;
+        return msg;
     }
 
     fun Mint(msg: TransferMoneyV0R0): Bool {
         if (self.value + msg.amount) <= self.limit {
             self.value = self.value + msg.amount;
-            if msg.currentStep == msg.countStep { 
+            if msg.currentStep == msg.countStep {
                 send(SendParameters{
                     to: msg.path.get(0)!!,
                     value: 0,
                     mode: SendRemainingValue,
-                    body: "Operation success".asComment()
+                    body: "payment chain end".asComment()
                 });
                 return true; 
             } 
@@ -374,8 +391,20 @@ contract LetsTrustlineV0R0 {
             return true;
         } else 
         {
-            msg.bounced = true;
-            self.reply(msg.toCell());
+            msg = self.AddPathBounce(msg);
+            let startNode: Address? = msg.path.get(msg.currentStep-1);
+            let endNode: Address? = msg.path.get(msg.currentStep);
+            send(SendParameters{
+                to: contractAddress(initOf LetsTrustlineV0R0(startNode!!, endNode!!)),
+                value: 0,
+                mode: SendRemainingValue,
+                body: msg.toCell() });
+            send(SendParameters{
+                    to: msg.path.get(0)!!,
+                    value: 0,
+                    mode: SendRemainingValue,
+                    body: "Operation error".asComment()
+                });
             return false;
         }
     } 
@@ -388,7 +417,7 @@ contract LetsTrustlineV0R0 {
                     to: msg.path.get(0)!!,
                     value: 0,
                     mode: SendRemainingValue,
-                    body: "Operation success".asComment()
+                    body: "payment chain end".asComment()
                 });
                 return true; 
             } 
@@ -399,12 +428,25 @@ contract LetsTrustlineV0R0 {
                 to: contractAddress(initOf LetsTrustlineV0R0(startNode!!, endNode!!)),
                 value: 0,
                 mode: SendRemainingValue,
-                body: msg.toCell() });
+                body: msg.toCell()
+            });  
             return true;
         } else 
         {
-            msg.bounced = true;
-            self.reply(msg.toCell());
+            msg = self.AddPathBounce(msg);
+            let startNode: Address? = msg.path.get(msg.currentStep-1);
+            let endNode: Address? = msg.path.get(msg.currentStep);
+            send(SendParameters{
+                to: contractAddress(initOf LetsTrustlineV0R0(endNode!!, startNode!!)),
+                value: 0,
+                mode: SendRemainingValue,
+                body: msg.toCell() });
+            send(SendParameters{
+                    to: msg.path.get(0)!!,
+                    value: 0,
+                    mode: SendRemainingValue,
+                    body: "Operation error".asComment()
+                });
             return false;
         }
     }
@@ -412,11 +454,11 @@ contract LetsTrustlineV0R0 {
     receive (msg: TransferMoneyV0R0) {
         require(self.active, "Error: contract not active");
         
-        if (sender() == self.creditor) && (msg.bounced == false) {
+        if (sender() == self.creditor) {
             self.Burn(msg); return;
         }
 
-        if (sender() == self.debitor) && (msg.bounced == false) {
+        if (sender() == self.debitor) {
             self.Mint(msg); return;
         }
         
@@ -425,20 +467,16 @@ contract LetsTrustlineV0R0 {
         let trustlineBurn: Address = contractAddress(initOf LetsTrustlineV0R0(startNode!!, endNode!!));
         let trustlineMint: Address = contractAddress(initOf LetsTrustlineV0R0(endNode!!, startNode!!));
   
-        if (sender() == trustlineMint) && (msg.bounced == false) {
-            self.Mint(msg); return;
+        if (sender() == trustlineMint) {
+            //dump("mint");
+            self.Mint(msg); 
+            return;
         }
 
-        if (sender() == trustlineBurn) && (msg.bounced == false) {
-            self.Burn(msg); return;
-        }
-
-        if (sender() == trustlineMint) && (msg.bounced == true) {
-            self.Mint(msg); return;
-        }
-
-        if (sender() == trustlineBurn) && (msg.bounced == true) {
-            self.Burn(msg); return;
+        if (sender() == trustlineBurn) {
+            //dump("burn");
+            self.Burn(msg);
+            return;
         }
         
     }
@@ -574,7 +612,6 @@ message TransferMoneyV0R0 {
     onCredit: Bool = false;
     currentStep: Int as uint8;
     countStep: Int as uint8;
-    bounced: Bool = false;
     path: map<Int as uint8, Address>; 
     tontoTrustline: Int as coins;
 }
