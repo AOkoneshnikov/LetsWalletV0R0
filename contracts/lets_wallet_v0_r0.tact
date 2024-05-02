@@ -1,20 +1,12 @@
 import "@stdlib/deploy";
 
-contract LetsWalletV0R0 {
+contract LetsWalletV0R0 with Deployable {
     publickeyOwner: Int as uint256;
     seqno: Int as uint32 = 0;
     currency: String;
     addressSponsor: Address? = null;
     publickeySponsor: Int? as uint256 = null;
     content: Cell? = null;
-    locality: String? = null;
-    longitude: Int? = null;
-    latitude: Int? = null;
-    name: String? = null;
-    phone: String? = null;
-    email: String? = null;
-    telegramId: Int? as uint64 = null; 
-    telegramRef: String? = null;
     lastDestination: Address? = null;
     lastTransferAmount: Int as coins = 0;
 
@@ -27,7 +19,6 @@ contract LetsWalletV0R0 {
 
     receive ("payment chain end") {
         self.lastDestination = sender();
-       // dump("-- end payment --");
     }
 
     receive ("Operation success") {
@@ -35,11 +26,9 @@ contract LetsWalletV0R0 {
 
     external(msg: CreateTrustlineV0R0) {
         require(myBalance() > (msg.tontoTrustline + msg.tontoLink), "Error: not enough funds to create");
-
         if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
             let initTrustline: StateInit = initOf LetsTrustlineV0R0(myAddress(), msg.debitor);
             let initHub: StateInit = initOf LetsHubV0R0(self.currency);
-
             send(SendParameters{
                 to: contractAddress(initTrustline),
                 value: msg.tontoTrustline,
@@ -57,17 +46,14 @@ contract LetsWalletV0R0 {
 
     external(msg: SetSponsorV0R0) {
         require((self.publickeySponsor == null) && (self.addressSponsor == null), "Error: Sponsor already exist");
-
         if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
             self.publickeySponsor = msg.publicKey;
             self.addressSponsor = msg.address; 
         }
-        
     }
 
     external(msg: CancelSponsorV0R0) {
         require((self.publickeySponsor != null) || (self.addressSponsor != null), "Error: Sponsor no set");
-
         if (self.CheckMsg(msg.signature, msg.header, self.publickeySponsor!!)) {
             self.publickeySponsor = null;
             self.addressSponsor = null; 
@@ -85,17 +71,9 @@ contract LetsWalletV0R0 {
         }
     }
 
-    external(msg: SetCustomWalletDataV0R0) {
+    external(msg: SetContentWalletDataV0R0) {
         if (self.CheckMsg(msg.signature, msg.header, self.publickeyOwner)) {
             self.content = msg.content; 
-            self.locality = msg.locality; 
-            self.longitude = msg.longitude; 
-            self.latitude = msg.latitude; 
-            self.name = msg.name; 
-            self.phone = msg.phone; 
-            self.email = msg.email; 
-            self.telegramId = msg.telegramId; 
-            self.telegramRef = msg.telegramRef; 
         }
     }
 
@@ -144,13 +122,11 @@ contract LetsWalletV0R0 {
             if  countStep > 0 {
                 let nextNode: Address? = msg.path.get(1);
                 let initTrustline: StateInit? = null;
-
                 if msg.onCredit {
                     initTrustline = initOf LetsTrustlineV0R0(nextNode!!, myAddress());
                 } else {
                     initTrustline = initOf LetsTrustlineV0R0(myAddress(), nextNode!!);
                 }
-
                 send(SendParameters{
                     to: contractAddress(initTrustline!!),
                     value: msg.tontoTrustline,
@@ -187,15 +163,7 @@ contract LetsWalletV0R0 {
             currency: self.currency,
             addressSponsor: self.addressSponsor,
             balance: myBalance(),
-            content: self.content,
-            locality: self.locality,
-            longitude: self.longitude,
-            latitude: self.latitude,
-            name: self.name,
-            phone: self.phone,
-            email: self.email,
-            telegramId: self.telegramId, 
-            telegramRef:self.telegramRef
+            content: self.content
         };
     }
 
@@ -215,14 +183,11 @@ contract LetsWalletV0R0 {
         let header_hash: Int = header.hash();
         let timeout: Int = header.loadInt(32);
         let seqno: Int = header.loadInt(32);
-
         require(checkSignature(header_hash, signature, publickey), "Error: Invalid signature");
         require(seqno == self.seqno, "Error: Invalid seqno");
         require(now() < timeout, "Error: timeout expired");
-
         acceptMessage();
         self.seqno = (self.seqno + 1) % 65536;
-
         return true;
     }
 
@@ -232,7 +197,6 @@ contract LetsWalletV0R0 {
         let y: Int = 0;
         let i_a: Address? = null;
         let y_a: Address? = null;
-
         i_a = msg.path.get(0);
         require(i_a == myAddress(), "Error: first node in path must wallet");
         while (i_a != null) {
@@ -250,7 +214,7 @@ contract LetsWalletV0R0 {
     }
 }
 
-contract LetsHubV0R0 {
+contract LetsHubV0R0 with Deployable {
     currency: String;
     linkId: Int as uint64 = 0;
 
@@ -282,7 +246,7 @@ contract LetsHubV0R0 {
     }
 }
 
-contract LetsLinkV0R0 {
+contract LetsLinkV0R0 with Deployable {
     currency: String;
     linkId: Int as uint64;
     trustline: Address? = null;
@@ -313,7 +277,7 @@ contract LetsLinkV0R0 {
     }
 }
 
-contract LetsTrustlineV0R0 {
+contract LetsTrustlineV0R0 with Deployable {
     creditor: Address;
     debitor: Address;
     value: Int as coins = 0;
@@ -453,32 +417,26 @@ contract LetsTrustlineV0R0 {
 
     receive (msg: TransferMoneyV0R0) {
         require(self.active, "Error: contract not active");
-        
         if (sender() == self.creditor) {
             self.Burn(msg); return;
         }
-
         if (sender() == self.debitor) {
             self.Mint(msg); return;
         }
-        
         let startNode: Address? = msg.path.get(msg.currentStep-2);
         let endNode: Address? = msg.path.get(msg.currentStep-1);
         let trustlineBurn: Address = contractAddress(initOf LetsTrustlineV0R0(startNode!!, endNode!!));
         let trustlineMint: Address = contractAddress(initOf LetsTrustlineV0R0(endNode!!, startNode!!));
-  
         if (sender() == trustlineMint) {
             //dump("mint");
             self.Mint(msg); 
             return;
         }
-
         if (sender() == trustlineBurn) {
             //dump("burn");
             self.Burn(msg);
             return;
         }
-        
     }
 
     get fun Data(): TrustlineDataV0R0 {
@@ -503,18 +461,10 @@ message HubDataV0R0 {
     linkId: Int as uint64;
 }
 
-message SetCustomWalletDataV0R0 {
+message SetContentWalletDataV0R0 {
     signature: Slice as bytes64;
     header: Slice;
     content: Cell;
-    locality: String;
-    longitude: Int;
-    latitude: Int;
-    name: String;
-    phone: String;
-    email: String;
-    telegramId: Int as uint64; 
-    telegramRef: String;
 }
 
 message WalletDataV0R0 {
@@ -525,14 +475,6 @@ message WalletDataV0R0 {
     addressSponsor: Address?;
     balance: Int as coins;
     content: Cell?;
-    locality: String?;
-    longitude: Int?;
-    latitude: Int?;
-    name: String?;
-    phone: String?;
-    email: String?;
-    telegramId: Int? as uint64; 
-    telegramRef: String?;
 }
 
 

@@ -54,7 +54,10 @@ describe('LetsWalletV1R0', () => {
             {
                 value: toNano('150'),
             },
-            null,
+            {
+                $$type: 'Deploy',
+                queryId: 0n,
+            },
         );
 
         let i = 0; let limit = 0n;
@@ -67,7 +70,10 @@ describe('LetsWalletV1R0', () => {
                 {
                     value: toNano('10'),
                 },
-                null,
+                {
+                    $$type: 'Deploy',
+                    queryId: 0n,
+                },
             ); 
             i = i + 1;
         }
