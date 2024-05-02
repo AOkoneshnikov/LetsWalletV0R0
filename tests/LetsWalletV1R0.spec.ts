@@ -12,6 +12,7 @@ import { LetsHubV0R0 } from '../build/LetsWalletV0R0/tact_LetsHubV0R0';
 import { LetsHubLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsHubLinkV0R0';
 import { LetsLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsLinkV0R0';
 import { LetsTrustlineV0R0 } from '../build/LetsWalletV0R0/tact_LetsTrustlineV0R0';
+import { text } from 'stream/consumers';
 
 
 
@@ -229,6 +230,7 @@ describe('LetsWalletV1R0', () => {
 
 
     it('Test #2', async () => {
+
         
     });
 
