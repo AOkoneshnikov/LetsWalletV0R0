@@ -54,10 +54,7 @@ describe('LetsWalletV1R0', () => {
             {
                 value: toNano('150'),
             },
-            {
-                $$type: 'Deploy',
-                queryId: 0n,
-            },
+            null,
         );
 
         let i = 0; let limit = 0n;
@@ -65,15 +62,13 @@ describe('LetsWalletV1R0', () => {
             let seed = await getSecureRandomBytes(32);
             keypairs[i] = keyPairFromSeed(seed);
             wallets[i] = blockchain.openContract(await LetsWalletV0R0.fromInit('RUB', toBigIntBE(keypairs[i].publicKey)));
+            console.log(`pubkey = ${toBigIntBE(keypairs[i].publicKey)}`)
             let deployResult = await wallets[i].send(
                 deployer.getSender(),
                 {
                     value: toNano('10'),
                 },
-                {
-                    $$type: 'Deploy',
-                    queryId: 0n,
-                },
+                null,
             ); 
             i = i + 1;
         }
