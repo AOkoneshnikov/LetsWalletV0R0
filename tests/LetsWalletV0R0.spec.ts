@@ -7,9 +7,7 @@ import { TonClient } from '@ton/ton';
 import { toBigIntBE, toBigIntLE } from '@trufflesuite/bigint-buffer';
 import { Slice } from 'ton';
 import 'json-bigint';
-import { LetsTrustlineLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsTrustlineLinkV0R0';
 import { LetsHubV0R0 } from '../build/LetsWalletV0R0/tact_LetsHubV0R0';
-import { LetsHubLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsHubLinkV0R0';
 import { LetsLinkV0R0 } from '../build/LetsWalletV0R0/tact_LetsLinkV0R0';
 import { LetsTrustlineV0R0 } from '../build/LetsWalletV0R0/tact_LetsTrustlineV0R0';
 import { text } from 'stream/consumers';
@@ -61,7 +59,7 @@ describe('LetsWalletV1R0', () => {
         while (i < 10) {
             let seed = await getSecureRandomBytes(32);
             keypairs[i] = keyPairFromSeed(seed);
-            wallets[i] = blockchain.openContract(await LetsWalletV0R0.fromInit('RUB', toBigIntBE(keypairs[i].publicKey)));
+            wallets[i] = blockchain.openContract(await LetsWalletV0R0.fromInit(toBigIntBE(keypairs[i].publicKey), 'RUB'));
             console.log(`pubkey = ${toBigIntBE(keypairs[i].publicKey)}`)
             let deployResult = await wallets[i].send(
                 deployer.getSender(),
@@ -231,7 +229,7 @@ describe('LetsWalletV1R0', () => {
 
 
     it('Test #2', async () => {
-
+        console.log(await trustlines[1].getData());
         
     });
 

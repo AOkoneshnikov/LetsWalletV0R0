@@ -10,7 +10,7 @@ contract LetsWalletV0R0 with Deployable {
     lastDestination: Address? = null;
     lastTransferAmount: Int as coins = 0;
 
-    init(currency: String, publicKey: Int) {
+    init(publicKey: Int, currency: String) {
         self.publickeyOwner = publicKey;
         self.currency = currency;
     }
@@ -153,17 +153,18 @@ contract LetsWalletV0R0 with Deployable {
                 value: msg.value,      
                 body: "widthraw sponsored funds".asComment()        
             });
+        self.seqno = (self.seqno + 1) % 65536;
     }
 
-    get fun Data(): WalletDataV0R0 {
+    get fun data(): WalletDataV0R0 {
         return WalletDataV0R0 { 
             publickeyOwner: self.publickeyOwner,
             publickeySponsor: self.publickeySponsor,
-            seqno: self.seqno,
             currency: self.currency,
             addressSponsor: self.addressSponsor,
             balance: myBalance(),
-            content: self.content
+            content: self.content,
+            seqno: self.seqno
         };
     }
 
@@ -226,7 +227,7 @@ contract LetsHubV0R0 with Deployable {
 
     receive (msg: SetTrustlineV0R0) {
         require (sender() == msg.creditor, "Error: only creditor can make link");
-        let initLink: StateInit = initOf LetsLinkV0R0(self.currency, self.linkId);
+        let initLink: StateInit = initOf LetsLinkV0R0(self.linkId, self.currency);
         send(SendParameters{
                 to: contractAddress(initLink),
                 value: 0,
@@ -238,7 +239,7 @@ contract LetsHubV0R0 with Deployable {
         self.linkId = self.linkId + 1;
     }
 
-    get fun Data(): HubDataV0R0 {
+    get fun data(): HubDataV0R0 {
         return HubDataV0R0 {
             balance: myBalance(),
             linkId: self.linkId
@@ -250,29 +251,32 @@ contract LetsLinkV0R0 with Deployable {
     currency: String;
     linkId: Int as uint64;
     trustline: Address? = null;
-    wallet: Address? = null;
+    creditor: Address? = null;
+    debitor: Address? = null;
 
-    init (currency: String, linkId: Int) {
+    init (linkId: Int, currency: String) {
         self.currency = currency;
         self.linkId = linkId;
     }
     
     receive () {
-        require(sender() == self.wallet, "Error: Only owner wallet can send empty message");
+        require(sender() == self.creditor, "Error: Only owner wallet can send empty message");
     }
 
     receive (msg: SetTrustlineV0R0) {
         let initHub: StateInit = initOf LetsHubV0R0(self.currency);
         require(sender() == contractAddress(initHub), "Error: Only LetsHubV0R0 can set trustline address");
         self.trustline = contractAddress(initOf LetsTrustlineV0R0(msg.creditor, msg.debitor));
-        self.wallet = msg.creditor;
+        self.creditor = msg.creditor;
+        self.debitor = msg.debitor;
     }
 
-    get fun Data(): LinkDataV0R0 {
+    get fun data(): LinkDataV0R0 {
         return LinkDataV0R0 {
             balance: myBalance(),
             trustline: self.trustline,
-            wallet: self.wallet
+            creditor: self.creditor,
+            debitor: self.debitor
         };
     }
 }
@@ -285,6 +289,8 @@ contract LetsTrustlineV0R0 with Deployable {
     interest: Int as uint16 = 0;
     interestProject: Int as uint16 = 0;
     active: Bool = false;
+    seqno: Int as uint32 = 0;
+    lastAccrualTime: Int as uint32 = 0;
 
     init (creditor: Address, debitor: Address) {
         require (sender() == creditor, "Error: only creditor can create LetsTrustlineV0R0");
@@ -295,6 +301,15 @@ contract LetsTrustlineV0R0 with Deployable {
     receive ("fund") {
         require(sender() == self.creditor, "Error: Only creditor can funds wallet");
         self.active = true;
+        self.seqno = (self.seqno + 1) % 65536;
+    }
+
+    receive ("accrual of interest") {
+        require(sender() == self.creditor, "Error: only creditor can accrual of interest");
+        require(now() - self.lastAccrualTime > 24*60*60, "Error: accrual of interest on the loan no more than once a day");
+        self.value = self.value + self.value * self.interest *(now()-self.lastAccrualTime) / (365*24*60*60*100);
+        self.lastAccrualTime = now();
+        self.seqno = (self.seqno + 1) % 65536;
     }
 
     receive (msg: SetLimitV0R0) {
@@ -302,22 +317,26 @@ contract LetsTrustlineV0R0 with Deployable {
         require((sender() == self.creditor) && (msg.debitor == self.debitor), "Error: only creditor can set limit or incorrect debitor address");
         self.limit = msg.limit;
         self.reply("Operation success".asComment());
+        self.seqno = (self.seqno + 1) % 65536;
     }
 
     receive (msg: SetInterestProjectV0R0) {
-        require(self.active, "Error: contract not active");
+        require(self.active, "Error: contract is not active");
         require((sender() == self.creditor) && (msg.debitor == self.debitor), "Error: only creditor can set interest rate project or incorrect debitor address");
         self.interestProject = msg.interestProject;
         self.reply("Operation success".asComment());
+        self.seqno = (self.seqno + 1) % 65536;
     }
 
     receive (msg: ConfirmInterestV0R0) {
-        require(self.active, "Error: contract not active");
+        require(self.active, "Error: contract is not active");
         require((sender() == self.debitor) && (msg.creditor == self.creditor), "Error: only debitor can confirm interest or incorrect creditor address");
         require(self.interestProject == msg.interestProject, "Error: incorrest interest rate project");
         self.interest = self.interestProject;
         self.interestProject = 0;
         self.reply("Operation success".asComment());
+        self.lastAccrualTime = now();
+        self.seqno = (self.seqno + 1) % 65536;
     }
 
     fun AddPathBounce(msg: TransferMoneyV0R0):TransferMoneyV0R0 {
@@ -418,42 +437,50 @@ contract LetsTrustlineV0R0 with Deployable {
     receive (msg: TransferMoneyV0R0) {
         require(self.active, "Error: contract not active");
         if (sender() == self.creditor) {
-            self.Burn(msg); return;
+            self.Burn(msg); self.seqno = (self.seqno + 1) % 65536; return;
         }
         if (sender() == self.debitor) {
-            self.Mint(msg); return;
+            self.Mint(msg); self.seqno = (self.seqno + 1) % 65536; return;
         }
         let startNode: Address? = msg.path.get(msg.currentStep-2);
         let endNode: Address? = msg.path.get(msg.currentStep-1);
         let trustlineBurn: Address = contractAddress(initOf LetsTrustlineV0R0(startNode!!, endNode!!));
         let trustlineMint: Address = contractAddress(initOf LetsTrustlineV0R0(endNode!!, startNode!!));
         if (sender() == trustlineMint) {
-            //dump("mint");
             self.Mint(msg); 
+            self.seqno = (self.seqno + 1) % 65536;
             return;
         }
         if (sender() == trustlineBurn) {
-            //dump("burn");
             self.Burn(msg);
+            self.seqno = (self.seqno + 1) % 65536;
             return;
         }
     }
 
-    get fun Data(): TrustlineDataV0R0 {
+    get fun data(): TrustlineDataV0R0 {
         return TrustlineDataV0R0 {
             value: self.value,
             limit: self.limit,
             interest: self.interest,
             interestProject: self.interestProject,
-            balance: myBalance()
+            balance: myBalance(),
+            seqno: self.seqno,
+            creditor: self.creditor,
+            debitor: self.debitor
         };
+    }
+
+    get fun seqno(): Int {
+        return self.seqno;
     }
 }
 
 message LinkDataV0R0 {
     balance: Int as coins;
     trustline: Address?;
-    wallet: Address?;
+    creditor: Address?;
+    debitor: Address?;
 }
 
 message HubDataV0R0 {
@@ -470,11 +497,11 @@ message SetContentWalletDataV0R0 {
 message WalletDataV0R0 {
     publickeyOwner: Int as uint256;
     publickeySponsor: Int? as uint256;
-    seqno: Int as uint64;
     currency: String;
     addressSponsor: Address?;
     balance: Int as coins;
     content: Cell?;
+    seqno: Int as uint32;
 }
 
 
@@ -521,6 +548,9 @@ message TrustlineDataV0R0 {
     interest: Int as uint16;
     interestProject: Int as uint16;
     balance: Int as coins;
+    seqno: Int as uint32;
+    creditor: Address;
+    debitor: Address;
 }
 
 message SetLimitV0R0 {

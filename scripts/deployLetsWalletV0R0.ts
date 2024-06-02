@@ -3,7 +3,7 @@ import { LetsWalletV0R0 } from '../wrappers/LetsWalletV0R0';
 import { createNetworkProvider, NetworkProvider } from '@ton/blueprint';
 
 export async function run(provider: NetworkProvider) {
-    const letsWalletV1R0 = provider.open(await LetsWalletV0R0.fromInit('RUB', 4986475416839105905744086359049208668692504628780654146611869429749505348094n));
+    const letsWalletV1R0 = provider.open(await LetsWalletV0R0.fromInit(71707451370353143665656693434404189513283888826414446208909227028004624693805n, 'RUB'));
 
     console.log(`wallet addres ${letsWalletV1R0.address}`);
     
