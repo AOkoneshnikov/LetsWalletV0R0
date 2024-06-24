@@ -1,4 +1,4 @@
-# LetsSystemV1R0
+# LetsWalletV0R0
 
 ## Project structure
 
